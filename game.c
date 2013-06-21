@@ -1,5 +1,8 @@
 #include <curses.h>
 
+WINDOW *create_newwin(int height, int width, int starty, int startx);
+void destroy_win(WINDOW *local_win);
+
 void printarray(unsigned int fbf[5][5]) 
 {
      int i, j;
@@ -13,29 +16,53 @@ void printarray(unsigned int fbf[5][5])
      return;
 }
 
+WINDOW *create_newwin(int height, int width, int starty, int startx)
+{	WINDOW *local_win;
+
+	local_win = newwin(height, width, starty, startx);
+	box(local_win, 0 , 0);		/* 0, 0 gives default characters 
+					 * for the vertical and horizontal
+					 * lines			*/
+	wrefresh(local_win);		/* Show that box 		*/
+
+	return local_win;
+}
+
 void ncursesprintarray(unsigned int fbf[5][5])
 {
-     int i, j;
+     WINDOW *my_win;
+     int startx, starty, width, height;
      int ch;
+     int i, j;
 
-     initscr();
-     noecho();
-     raw();
+     initscr();  /* init ncurses screen */
+     noecho();   /* do not echo getch() input */
+     raw();      /* i forget */
 
-     printw("(X)-(o)-(o)-(o)-(X)\n");
-     printw(" | \\ | / | \\ | / | \n");
-     printw("(o)-(o)-(o)-(o)-(o)\n");
-     printw(" | / | \\ | / | \\ | \n");
-     printw("(o)-(o)-( )-(o)-(o)\n");
-     printw(" | \\ | / | \\ | / | \n");
-     printw("(o)-(o)-(o)-(o)-(o)\n");
-     printw(" | / | \\ | / | \\ | \n");
-     printw("(X)-(o)-(o)-(o)-(X)\n");
+     height = 13;
+     width  = 25; 
+     starty = (LINES - height) / 2;
+     startx = (COLS - width) / 2;
+
+     my_win = create_newwin(height, width, starty, startx);
+
+     /* print game board */
+
+     mvwprintw(my_win, 2, 3, "( )-( )-( )-( )-( )");
+     mvwprintw(my_win, 3, 3, " | \\ | / | \\ | / | ");
+     mvwprintw(my_win, 4, 3, "( )-( )-( )-( )-( )");
+     mvwprintw(my_win, 5, 3, " | / | \\ | / | \\ | ");
+     mvwprintw(my_win, 6, 3, "( )-( )-( )-( )-( )");
+     mvwprintw(my_win, 7, 3, " | \\ | / | \\ | / | ");
+     mvwprintw(my_win, 8, 3, "( )-( )-( )-( )-( )");
+     mvwprintw(my_win, 9, 3, " | / | \\ | / | \\ | ");
+     mvwprintw(my_win, 10,3, "( )-( )-( )-( )-( )");
+
+     /* wait for input. quit on ESC */
 
      while (ch != 27) {
-          refresh();
-          ch = getch();
-          printw("%d\n", ch);
+          wrefresh(my_win);
+          ch = wgetch(my_win);
      }
      
      endwin();
