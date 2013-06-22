@@ -4,6 +4,10 @@
 
 static const int GB_MARGIN_TOP  = 2;     /* margins between edge of window and piece */
 static const int GB_MARGIN_LEFT = 4;
+
+void printstatus(WINDOW *status_win, char *status_text);
+void draw_empty_gb(WINDOW *gb_win);
+
 static int MOVEMENT_MATRIX[5][5][9] = {  /* left to right, top to bottom, per all 25 spaces:
                                             nine adjacencies; 1 = legal move, 0 = illegal.  */
     {
@@ -66,7 +70,7 @@ WINDOW *create_newwin(int height, int width, int starty, int startx)
     return local_win;
 }
 
-void ncd_gb_pieces(WINDOW *gb_win, int gb_array[5][5]) 
+void draw_pieces(WINDOW *gb_win, int gb_array[5][5]) 
 {
      const char piecechar[3] = {' ', 'o', 'X'};
      int i, j;
@@ -80,7 +84,7 @@ void ncd_gb_pieces(WINDOW *gb_win, int gb_array[5][5])
      return;
 }
 
-void ncd_gb_board(WINDOW *gb_win)
+void draw_gb(WINDOW *gb_win)
 {
      mvwprintw(gb_win, 2, 3, "( )-( )-( )-( )-( )");
      mvwprintw(gb_win, 3, 3, " | \\ | / | \\ | / | ");
@@ -113,33 +117,67 @@ void goat_place(int gb_array[5][5])
     return;
 }
 
-void tiger_move(int gb_array[5][5])
+void drawpiece(WINDOW *gb_win, int x, int y, const char ch) 
 {
+     mvwaddch(gb_win, GB_MARGIN_TOP + (y*2), GB_MARGIN_LEFT + (x*4), ch);
+     wrefresh(gb_win);
+     return;
+}
+
+void tiger_move(WINDOW *gb_win, int gb_array[5][5])
+{
+    int tiger_locs_cur[4][2] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}}; /* init 4 current tiger locs */
+    int t, i, j, k, m;
+    int selecting = 1;  /* set to 0 when move selection is complete */
+
+    /* transcribe current location of all 4 tigers */
+ 
+    for (t = 0; t < 4; t++) {                    /* tiger counter */
+         for (i = 0; i < 5; i++) {               /* x val of gb_array loc */
+              for (j = 0; j < 5; j ++) {         /* y */
+                   if (gb_array[i][j] == 2) {    /* if there is a tiger at gb_array[i][j] */
+                        tiger_locs_cur[t][0] = i;          /* set tiger #t's xval = i */
+                        tiger_locs_cur[t][1] = j;          /*                yval = j */
+                        drawpiece(gb_win, i, j, '@');  /* draw '@' at current location */
+                   }
+              }
+         }
+    }
+
+    t = rand() % 4;     /* randomly choose one tiger to move */
+
     return; 
 }
 
-void test_movement_matrix(WINDOW *gb_win, int gb_array[5][5])
+void test_movement_matrix(WINDOW *gb_win)
 {
     /* test MOVEMENT_MATRIX */
     /* For each of all 25 spaces, mark current space with '+' and legal moves with '#' */ 
 
-    int i, j, k, l;
+    int i, j, k, m;
 
-    for ( i = 0; i < 5; i ++) {
-         for (j = 0; j < 5; j ++) {
+    draw_empty_gb(gb_win);
+
+    for ( i = 0; i < 5; i ++) {                                 /* gameboard x */
+         for (j = 0; j < 5; j ++)                               /*           y */ 
+         {                                                      
+              draw_empty_gb(gb_win);
               mvwaddch(gb_win, GB_MARGIN_TOP + (i*2), GB_MARGIN_LEFT + (j*4), '+');
-              for (k = 0; k < 3; k ++) {
-                   for (l = 0; l < 3; l ++) {
-                        if (MOVEMENT_MATRIX[i][j][k*3+l] == 1)
+              for (k = 0; k < 3; k ++) {                        /* gb(x,y) adjacent x */
+                   for (m = 0; m < 3; m ++) {                   /*                  y */
+                        if ( MOVEMENT_MATRIX[i][j][k*3+m] ) {
                              mvwaddch(gb_win,
                                       GB_MARGIN_TOP  + (i*2) + (k-1)*2,
-                                      GB_MARGIN_LEFT + (j*4) + (l-1)*4, '#');
+                                      GB_MARGIN_LEFT + (j*4) + (m-1)*4, '#');
+                             wrefresh(gb_win);
+                               halfdelay(2);
+                               wgetch(gb_win);
+                        }
                    }
               }
               wrefresh(gb_win);
-              halfdelay(100);
-              wgetch(gb_win);
-              ncd_gb_pieces(gb_win, gb_array);
+                halfdelay(10);
+                wgetch(gb_win);
          }
     }
     return;
@@ -152,7 +190,23 @@ void printstatus(WINDOW *status_win, char *status_text)
     return;
 }
 
-void ncd_game(int gb_array[5][5])
+void draw_empty_gb(WINDOW *gb_win)
+{
+    int empty_gb_array[5][5] =
+    { 
+         { 0, 0, 0, 0, 0 },
+         { 0, 0, 0, 0, 0 },
+         { 0, 0, 0, 0, 0 },
+         { 0, 0, 0, 0, 0 },
+         { 0, 0, 0, 0, 0 }
+    };
+
+    draw_pieces(gb_win, empty_gb_array);
+     
+    return;
+}
+
+void game(int gb_array[5][5])
 {
     WINDOW *gb_win, *status_win;
     int startx, starty, width, height;
@@ -176,43 +230,24 @@ void ncd_game(int gb_array[5][5])
     printstatus(status_win, "Bahg-Chal Tests");
 
          /* print game board */
-    ncd_gb_board(gb_win);  
+    draw_gb(gb_win);  
 
          /* print game pieces */
-    ncd_gb_pieces(gb_win, gb_array);  
+    draw_pieces(gb_win, gb_array);  
 
          /* placement phase */
     for ( i = 0; i < 20; i++) {
          goat_place(gb_array);
-         ncd_gb_pieces(gb_win, gb_array);
-         halfdelay(1);
-         wgetch(gb_win);
-         tiger_move(gb_array); /* to be written */
+         draw_pieces(gb_win, gb_array);
+           halfdelay(1);
+           wgetch(gb_win);
+         tiger_move(gb_win, gb_array);           /* in progress - to be written */
     }
 
          /* test MOVEMENT_MATRIX */
-    test_movement_matrix(gb_win, gb_array);
+    printstatus(status_win, "   LEGAL MOVES:  ");
+    test_movement_matrix(gb_win);
 
-/*
-    for ( i = 0; i < 5; i ++) {
-         for (j = 0; j < 5; j ++) {
-              mvwaddch(gb_win, GB_MARGIN_TOP + (i*2), GB_MARGIN_LEFT + (j*4), '+');
-              for (k = 0; k < 3; k ++) {
-                   for (l = 0; l < 3; l ++) {
-                        if (MOVEMENT_MATRIX[i][j][k*3+l] == 1) 
-                             mvwaddch(gb_win,
-                                      GB_MARGIN_TOP  + (i*2) + (k-1)*2,
-                                      GB_MARGIN_LEFT + (j*4) + (l-1)*4, '#');
-                   }
-              }
-              wrefresh(gb_win);
-              halfdelay(100);
-              wgetch(gb_win);
-              ncd_gb_pieces(gb_win, gb_array);
-         }                             
-    }
-*/                   
-              
          /* wait for input. quit on ESC */
     while (ch != 27) {
          wrefresh(gb_win);            /* draw the screen */
@@ -234,7 +269,7 @@ void playgame()
          { 2, 0, 0, 0, 2 }
     };
 
-    ncd_game(gb_array);
+    game(gb_array);
     return;
 }
 
