@@ -118,26 +118,62 @@ void tiger_move(int gb_array[5][5])
     return; 
 }
 
+void test_movement_matrix(WINDOW *gb_win, int gb_array[5][5])
+{
+    /* test MOVEMENT_MATRIX */
+    /* For each of all 25 spaces, mark current space with '+' and legal moves with '#' */ 
+
+    int i, j, k, l;
+
+    for ( i = 0; i < 5; i ++) {
+         for (j = 0; j < 5; j ++) {
+              mvwaddch(gb_win, GB_MARGIN_TOP + (i*2), GB_MARGIN_LEFT + (j*4), '+');
+              for (k = 0; k < 3; k ++) {
+                   for (l = 0; l < 3; l ++) {
+                        if (MOVEMENT_MATRIX[i][j][k*3+l] == 1)
+                             mvwaddch(gb_win,
+                                      GB_MARGIN_TOP  + (i*2) + (k-1)*2,
+                                      GB_MARGIN_LEFT + (j*4) + (l-1)*4, '#');
+                   }
+              }
+              wrefresh(gb_win);
+              halfdelay(100);
+              wgetch(gb_win);
+              ncd_gb_pieces(gb_win, gb_array);
+         }
+    }
+    return;
+}
+
+void printstatus(WINDOW *status_win, char *status_text)
+{
+    mvwaddstr(status_win, 1, 4, status_text);
+    wrefresh(status_win);
+    return;
+}
+
 void ncd_game(int gb_array[5][5])
 {
-    WINDOW *gb_win;
+    WINDOW *gb_win, *status_win;
     int startx, starty, width, height;
-    int i, j, k, l;
+    int i;
     int ch;
  
-    initscr();  /* init ncurses screen */
-    noecho();   /* do not echo getch() input */
-    raw();      /* i forget */
+    initscr();     /* init ncurses screen */
+    noecho();      /* do not echo getch() input */
+    raw();         /* i forget */
+    curs_set(0);   /* set cursor to invisible */
 
     height = 13;
     width  = 25; 
     starty = (LINES - height) / 2;
     startx = (COLS - width) / 2;
 
-    printw("test");
+         /* create gameboard and status windows */
+    gb_win     = create_newwin(height, width, starty, startx);    
+    status_win = create_newwin(3, width, starty-5, startx); 
 
-         /* create gameboard window */
-    gb_win = create_newwin(height, width, starty, startx);    
+    printstatus(status_win, "Bahg-Chal Tests");
 
          /* print game board */
     ncd_gb_board(gb_win);  
@@ -155,6 +191,9 @@ void ncd_game(int gb_array[5][5])
     }
 
          /* test MOVEMENT_MATRIX */
+    test_movement_matrix(gb_win, gb_array);
+
+/*
     for ( i = 0; i < 5; i ++) {
          for (j = 0; j < 5; j ++) {
               mvwaddch(gb_win, GB_MARGIN_TOP + (i*2), GB_MARGIN_LEFT + (j*4), '+');
@@ -172,7 +211,7 @@ void ncd_game(int gb_array[5][5])
               ncd_gb_pieces(gb_win, gb_array);
          }                             
     }
-                   
+*/                   
               
          /* wait for input. quit on ESC */
     while (ch != 27) {
@@ -201,8 +240,8 @@ void playgame()
 
 int main() 
 {
-    srand(time(NULL));
-    playgame();
+    srand(time(NULL));       /* seed randomizer */
+    playgame();            
     return 0;
 }
 
