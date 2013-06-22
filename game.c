@@ -1,12 +1,15 @@
 #include <curses.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 static const int GB_MARGIN_TOP  = 2;     /* margins between edge of window and piece */
 static const int GB_MARGIN_LEFT = 4;
 
 void printstatus(WINDOW *status_win, char *status_text);
 void draw_empty_gb(WINDOW *gb_win);
+void draw_pieces(WINDOW *gb_win, int gb_array[5][5]);
+void delay(WINDOW *gb_win, int delay);
 
 static int MOVEMENT_MATRIX[5][5][9] = {  /* left to right, top to bottom, per all 25 spaces:
                                             nine adjacencies; 1 = legal move, 0 = illegal.  */
@@ -72,7 +75,7 @@ WINDOW *create_newwin(int height, int width, int starty, int startx)
 
 void draw_pieces(WINDOW *gb_win, int gb_array[5][5]) 
 {
-     const char piecechar[3] = {' ', 'o', 'X'};
+     const char piecechar[3] = {' ', 'o', '@'};
      int i, j;
 
      for (i = 0; i < 5; i ++) {
@@ -138,7 +141,7 @@ void tiger_move(WINDOW *gb_win, int gb_array[5][5])
                    if (gb_array[i][j] == 2) {    /* if there is a tiger at gb_array[i][j] */
                         tiger_locs_cur[t][0] = i;          /* set tiger #t's xval = i */
                         tiger_locs_cur[t][1] = j;          /*                yval = j */
-                        drawpiece(gb_win, i, j, '@');  /* draw '@' at current location */
+                        drawpiece(gb_win, i, j, 'X');  /* draw 'X' at current location */
                    }
               }
          }
@@ -163,21 +166,18 @@ void test_movement_matrix(WINDOW *gb_win)
          {                                                      
               draw_empty_gb(gb_win);
               mvwaddch(gb_win, GB_MARGIN_TOP + (i*2), GB_MARGIN_LEFT + (j*4), '+');
+              delay(gb_win, 1);
               for (k = 0; k < 3; k ++) {                        /* gb(x,y) adjacent x */
                    for (m = 0; m < 3; m ++) {                   /*                  y */
                         if ( MOVEMENT_MATRIX[i][j][k*3+m] ) {
                              mvwaddch(gb_win,
                                       GB_MARGIN_TOP  + (i*2) + (k-1)*2,
                                       GB_MARGIN_LEFT + (j*4) + (m-1)*4, '#');
-                             wrefresh(gb_win);
-                               halfdelay(2);
-                               wgetch(gb_win);
+                             delay(gb_win, 0);
                         }
                    }
               }
-              wrefresh(gb_win);
-                halfdelay(10);
-                wgetch(gb_win);
+         delay(gb_win, 1);
          }
     }
     return;
@@ -185,8 +185,18 @@ void test_movement_matrix(WINDOW *gb_win)
 
 void printstatus(WINDOW *status_win, char *status_text)
 {
-    mvwaddstr(status_win, 1, 4, status_text);
-    wrefresh(status_win);
+    int i;
+    int read_delay = 1;
+    int draw_delay = 0;
+
+    mvwaddstr(status_win, 1, 3, "                                                ");
+    delay(status_win, read_delay);
+    for (i = 0; i < strlen(status_text); i++)
+    {
+         mvwaddch(status_win, 1, 3+i, status_text[i]);
+         delay(status_win, draw_delay);
+    }
+    delay(status_win, read_delay);
     return;
 }
 
@@ -206,10 +216,20 @@ void draw_empty_gb(WINDOW *gb_win)
     return;
 }
 
+void delay(WINDOW *gb_win, int delay)
+{
+    if (delay) {
+         halfdelay(delay);
+         wgetch(gb_win);
+    }
+    wrefresh(gb_win);
+    return;
+}
+
 void game(int gb_array[5][5])
 {
     WINDOW *gb_win, *status_win;
-    int startx, starty, width, height;
+    int gb_startx, gb_starty, gb_width, gb_height, status_width, status_startx;
     int i;
     int ch;
  
@@ -218,35 +238,38 @@ void game(int gb_array[5][5])
     raw();         /* i forget */
     curs_set(0);   /* set cursor to invisible */
 
-    height = 13;
-    width  = 25; 
-    starty = (LINES - height) / 2;
-    startx = (COLS - width) / 2;
+    gb_height     = 13;
+    gb_width      = 25; 
+    gb_starty     = (LINES - gb_height) / 2;
+    gb_startx     = (COLS - gb_width) / 2;
+    status_width  = 52;
+    status_startx = (COLS - status_width) / 2;
 
          /* create gameboard and status windows */
-    gb_win     = create_newwin(height, width, starty, startx);    
-    status_win = create_newwin(3, width, starty-5, startx); 
+    gb_win     = create_newwin(gb_height, gb_width,     gb_starty,     gb_startx);    
+    status_win = create_newwin(3,         status_width, gb_starty - 5, status_startx); 
 
-    printstatus(status_win, "Bahg-Chal Tests");
+    printstatus(status_win, "Drawing Gameboard...");
 
          /* print game board */
     draw_gb(gb_win);  
+    delay(gb_win, 5);
+
+         /* test MOVEMENT_MATRIX */
+    printstatus(status_win, "Drawing Legal Moves...");
+    test_movement_matrix(gb_win);
 
          /* print game pieces */
     draw_pieces(gb_win, gb_array);  
 
          /* placement phase */
+    printstatus(status_win, "Phase One: Goat Placement...");
     for ( i = 0; i < 20; i++) {
          goat_place(gb_array);
          draw_pieces(gb_win, gb_array);
-           halfdelay(1);
-           wgetch(gb_win);
+         delay(gb_win, 1);
          tiger_move(gb_win, gb_array);           /* in progress - to be written */
     }
-
-         /* test MOVEMENT_MATRIX */
-    printstatus(status_win, "   LEGAL MOVES:  ");
-    test_movement_matrix(gb_win);
 
          /* wait for input. quit on ESC */
     while (ch != 27) {
@@ -268,7 +291,6 @@ void playgame()
          { 0, 0, 0, 0, 0 },
          { 2, 0, 0, 0, 2 }
     };
-
     game(gb_array);
     return;
 }
