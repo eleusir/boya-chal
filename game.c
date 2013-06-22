@@ -122,7 +122,7 @@ void ncd_game(int gb_array[5][5])
 {
     WINDOW *gb_win;
     int startx, starty, width, height;
-    int i;
+    int i, j, k, l;
     int ch;
  
     initscr();  /* init ncurses screen */
@@ -149,11 +149,31 @@ void ncd_game(int gb_array[5][5])
     for ( i = 0; i < 20; i++) {
          goat_place(gb_array);
          ncd_gb_pieces(gb_win, gb_array);
-         halfdelay(2);
+         halfdelay(1);
          wgetch(gb_win);
          tiger_move(gb_array); /* to be written */
     }
 
+         /* test MOVEMENT_MATRIX */
+    for ( i = 0; i < 5; i ++) {
+         for (j = 0; j < 5; j ++) {
+              mvwaddch(gb_win, GB_MARGIN_TOP + (i*2), GB_MARGIN_LEFT + (j*4), '+');
+              for (k = 0; k < 3; k ++) {
+                   for (l = 0; l < 3; l ++) {
+                        if (MOVEMENT_MATRIX[i][j][k*3+l] == 1) 
+                             mvwaddch(gb_win,
+                                      GB_MARGIN_TOP  + (i*2) + (k-1)*2,
+                                      GB_MARGIN_LEFT + (j*4) + (l-1)*4, '#');
+                   }
+              }
+              wrefresh(gb_win);
+              halfdelay(100);
+              wgetch(gb_win);
+              ncd_gb_pieces(gb_win, gb_array);
+         }                             
+    }
+                   
+              
          /* wait for input. quit on ESC */
     while (ch != 27) {
          wrefresh(gb_win);            /* draw the screen */
