@@ -67,7 +67,7 @@ int myrandom()
 
     unsigned int data;
     FILE *fp;
-    fp = fopen("/dev/random", "r");
+    fp = fopen("/dev/urandom", "r");
     fread(&data, sizeof(data), 1, fp);
     fclose(fp);
     return data;
@@ -156,13 +156,14 @@ void drawpiece(WINDOW *gb_win, int x, int y, const char ch)
 
 int legal_move(int x, int y, int adj_x, int adj_y)
 {
-    return MOVEMENT_MATRIX[x][y][(adj_y*3) + adj_x]; 
+    return MOVEMENT_MATRIX[y][x][(adj_y*3) + adj_x]; 
 }
 
 void tiger_move(WINDOW *gb_win, int gb_array[5][5])
 {
     int tiger_loc[4][2] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}}; /* init 4 current tiger locs */
     int t = 0; 
+    int tempx, tempy;
     int i, j, k, m;
     int selecting = 1;  /* set to 0 when move selection is complete */
     int adjacent_val;   /* value of adjacent space (nothing, goat, or tiger)*/
@@ -175,28 +176,46 @@ void tiger_move(WINDOW *gb_win, int gb_array[5][5])
                    if (gb_array[i][j] == 2) {    /* if there is a tiger at gb_array[i][j] */
                         tiger_loc[t][0] = i;          /* set tiger #t's xval = i */
                         tiger_loc[t][1] = j;          /*                yval = j */
-                        drawpiece(gb_win, i, j, 'X'); /* draw 'X' at current location */
+                        //drawpiece(gb_win, i, j, 'X'); /* draw 'X' at current location */
                         t++;                          
                    }
               }
          }
     }
 
-    t = rand() % 4;     /* randomly choose one tiger to move */
-    mvwprintw(gb_win, 1, 1, "%d", t);
-    for (k = 0; k < 3; k++) {
-         for (m = 0; m < 3; m++) {
-              /* first, scan for adjecent goats. check matrix to make sure move is legal... */
-              if (legal_move(tiger_loc[t][0], tiger_loc[t][1], k, m)) { 
-                   /* and if the value equals GOAT_VAL... */ 
-                   adjacent_val = gb_array[tiger_loc[t][0] + (k-1)][tiger_loc[t][1] + (m-1)];
-                   if (adjacent_val == GOAT_VAL) 
-                        /* eat the goat. TEMPORARILY, this is a special value, 3. */
-                        gb_array[tiger_loc[t][0] + (k-1)][tiger_loc[t][1] + (m-1)] = 3;
+    while (selecting) {
+         draw_pieces(gb_win, gb_array);
+         t = rand() % 4;     /* randomly choose one tiger to move */
+         drawpiece(gb_win, tiger_loc[t][0], tiger_loc[t][1], 'X');
+         delay(gb_win, 1);
+              /* first, scan adjecent spaces. check matrix to make sure move is legal... */
+         k = rand() % 3;
+         m = rand() % 3;
+         tempx = tiger_loc[t][0] + k-1;
+         tempy = tiger_loc[t][1] + m-1;
+         if (legal_move(tiger_loc[t][0], tiger_loc[t][1], k, m)) {   /* legal to consider move? */
+              if (gb_array[tempx][tempy]) {                          /* something in the space? */
+                   if (gb_array[tempx][tempy] == 1) {                          /* is it a goat? */
+                        if (legal_move(tempx, tempy, k, m)) {            /* is it jumpable? 1/2 */
+                             if (!gb_array[tempx + k-1][tempy + m-1]) {        /* jumpable? 2/2 */
+                                  gb_array[tempx + k-1][tempy + m-1] = 2;             /* move T */
+                                  gb_array[tiger_loc[t][0]][tiger_loc[t][1]] = 0;    /* erase T */
+                                  gb_array[tempx][tempy] = 0;                      /* erase G */
+                                  drawpiece(gb_win, tempx, tempy, '!');
+                                  delay(gb_win, 250);
+                                  selecting--;       /* register that a selection has been made */
+                             }
+                        }
+                   }
+              }
+              else if (!gb_array[tempx][tempy]) {      /* empty space - tiger moves there */ 
+                   gb_array[tempx][tempy] = 2;
+                   gb_array[tiger_loc[t][0]][tiger_loc[t][1]] = 0;
+                   draw_pieces(gb_win, gb_array);
+                   selecting--;
               }
          }
     }
-
     return; 
 }
 
@@ -276,6 +295,21 @@ void delay(WINDOW *win, int delay_amount)
     return;
 }
 
+void tiger_place(WINDOW *gb_win, int gb_array[5][5])
+{
+    int ri, rj;
+    int selecting = 4;
+
+    while (selecting) {
+         ri = rand() % 5;
+         rj = rand() % 5;
+         if (gb_array[ri][rj] == 0) {
+              gb_array[ri][rj] = 2;
+              selecting--;
+         }
+    } 
+}
+
 void game(int gb_array[5][5])
 {
     WINDOW *gb_win, *status_win;
@@ -312,26 +346,26 @@ void game(int gb_array[5][5])
     printstatus(status_win, "Drawing Legal Moves...");
     test_movement_matrix(gb_win);
 */
-         /* print game pieces */
-    printstatus(status_win, "Phase 0: Placing Tigers...");
-    draw_pieces(gb_win, gb_array);  
-    delay(gb_win, GLOBAL_DELAY);
-
-         /* placement phase */
-    printstatus(status_win, "Phase 1: Goat Placement...");
-
-         /* wait for input. quit on ESC */
+         /* Main loop. ESC (ch=27) breaks & quits. */
     while (ch != 27) {
-
+         /* initialize gameboard array to be entirely empty. */
          gb_init(gb_array);
 
+         /* Place 4 Tigers. */
+         printstatus(status_win, "Phase 0: Placing Tigers...");
+         tiger_place(gb_win, gb_array);
+         draw_pieces(gb_win, gb_array);  
+         delay(gb_win, GLOBAL_DELAY);
+
+         /* Place 20 Goats. */
+         printstatus(status_win, "Phase 1: Placing Goats...");
          for ( i = 0; i < 20; i++) {
               goat_place(gb_array);
+              tiger_move(gb_win, gb_array);           /* in progress - to be written */
               draw_pieces(gb_win, gb_array);
-              //tiger_move(gb_win, gb_array);           /* in progress - to be written */
               wrefresh(gb_win);
-              //halfdelay(1);
-              //ch = wgetch(gb_win);
+              halfdelay(1);
+              ch = wgetch(gb_win);
          }
          halfdelay(1);
          ch = wgetch(gb_win);
