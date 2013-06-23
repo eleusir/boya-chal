@@ -1,10 +1,13 @@
 #include <curses.h>
 #include <stdlib.h>
-#include <time.h>
 #include <string.h>
+
+#define GOAT_VAL   1
+#define TIGER_VAL  2
 
 static const int GB_MARGIN_TOP  = 2;     /* margins between edge of window and piece */
 static const int GB_MARGIN_LEFT = 4;
+static const int GLOBAL_DELAY   = 1;     /* global delay between status messages etc */
 
 void printstatus(WINDOW *status_win, char *status_text);
 void draw_empty_gb(WINDOW *gb_win);
@@ -46,6 +49,30 @@ static int MOVEMENT_MATRIX[5][5][9] = {  /* left to right, top to bottom, per al
     }
 };
 
+void gb_init(int gb_array[5][5])
+{
+    int i, j;
+
+    for (i = 0; i < 5; i++) {
+         for (j = 0; j < 5; j ++) {
+              gb_array[i][j] = 0;
+         }
+    }
+    return;
+}
+
+int myrandom()
+{
+    /* returns a random uINT drawn from /dev/random */
+
+    unsigned int data;
+    FILE *fp;
+    fp = fopen("/dev/random", "r");
+    fread(&data, sizeof(data), 1, fp);
+    fclose(fp);
+    return data;
+}
+
 void printarray(int gb_array[5][5]) 
 {
     /* merely prints the contents of the array to stdout. for testing */
@@ -75,7 +102,7 @@ WINDOW *create_newwin(int height, int width, int starty, int startx)
 
 void draw_pieces(WINDOW *gb_win, int gb_array[5][5]) 
 {
-     const char piecechar[3] = {' ', 'o', '@'};
+     const char piecechar[4] = {' ', 'o', '@', '*'};
      int i, j;
 
      for (i = 0; i < 5; i ++) {
@@ -104,16 +131,16 @@ void draw_gb(WINDOW *gb_win)
 
 void goat_place(int gb_array[5][5])
 {
-    int ri, rj; 
-    int i = 1;
+    int ri, rj;         /* random x, y variables */
+    int selecting = 1;  /* non-zero until eligible space is selected */
      
-    while (i)
+    while (selecting)
     { 
          ri = rand() % 5;
          rj = rand() % 5;
-         if (gb_array[ri][rj] == 0) {
-              gb_array[ri][rj] = 1;
-              i = 0;
+         if (!gb_array[ri][rj]) {
+              gb_array[ri][rj] = GOAT_VAL;
+              selecting = 0;
          }
     }
 
@@ -127,27 +154,48 @@ void drawpiece(WINDOW *gb_win, int x, int y, const char ch)
      return;
 }
 
+int legal_move(int x, int y, int adj_x, int adj_y)
+{
+    return MOVEMENT_MATRIX[x][y][(adj_y*3) + adj_x]; 
+}
+
 void tiger_move(WINDOW *gb_win, int gb_array[5][5])
 {
-    int tiger_locs_cur[4][2] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}}; /* init 4 current tiger locs */
-    int t, i, j, k, m;
+    int tiger_loc[4][2] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}}; /* init 4 current tiger locs */
+    int t = 0; 
+    int i, j, k, m;
     int selecting = 1;  /* set to 0 when move selection is complete */
+    int adjacent_val;   /* value of adjacent space (nothing, goat, or tiger)*/
 
-    /* transcribe current location of all 4 tigers */
+    /* transcribe current location of all 4 tigers into tiger_loc[tigernum][x,yloc]*/
  
-    for (t = 0; t < 4; t++) {                    /* tiger counter */
+    while (t < 4) {                    /* tiger counter */
          for (i = 0; i < 5; i++) {               /* x val of gb_array loc */
               for (j = 0; j < 5; j ++) {         /* y */
                    if (gb_array[i][j] == 2) {    /* if there is a tiger at gb_array[i][j] */
-                        tiger_locs_cur[t][0] = i;          /* set tiger #t's xval = i */
-                        tiger_locs_cur[t][1] = j;          /*                yval = j */
-                        drawpiece(gb_win, i, j, 'X');  /* draw 'X' at current location */
+                        tiger_loc[t][0] = i;          /* set tiger #t's xval = i */
+                        tiger_loc[t][1] = j;          /*                yval = j */
+                        drawpiece(gb_win, i, j, 'X'); /* draw 'X' at current location */
+                        t++;                          
                    }
               }
          }
     }
 
     t = rand() % 4;     /* randomly choose one tiger to move */
+    mvwprintw(gb_win, 1, 1, "%d", t);
+    for (k = 0; k < 3; k++) {
+         for (m = 0; m < 3; m++) {
+              /* first, scan for adjecent goats. check matrix to make sure move is legal... */
+              if (legal_move(tiger_loc[t][0], tiger_loc[t][1], k, m)) { 
+                   /* and if the value equals GOAT_VAL... */ 
+                   adjacent_val = gb_array[tiger_loc[t][0] + (k-1)][tiger_loc[t][1] + (m-1)];
+                   if (adjacent_val == GOAT_VAL) 
+                        /* eat the goat. TEMPORARILY, this is a special value, 3. */
+                        gb_array[tiger_loc[t][0] + (k-1)][tiger_loc[t][1] + (m-1)] = 3;
+              }
+         }
+    }
 
     return; 
 }
@@ -158,6 +206,7 @@ void test_movement_matrix(WINDOW *gb_win)
     /* For each of all 25 spaces, mark current space with '+' and legal moves with '#' */ 
 
     int i, j, k, m;
+    int read_delay = 0;
 
     draw_empty_gb(gb_win);
 
@@ -166,18 +215,17 @@ void test_movement_matrix(WINDOW *gb_win)
          {                                                      
               draw_empty_gb(gb_win);
               mvwaddch(gb_win, GB_MARGIN_TOP + (i*2), GB_MARGIN_LEFT + (j*4), '+');
-              delay(gb_win, 1);
+              delay(gb_win, read_delay);
               for (k = 0; k < 3; k ++) {                        /* gb(x,y) adjacent x */
                    for (m = 0; m < 3; m ++) {                   /*                  y */
                         if ( MOVEMENT_MATRIX[i][j][k*3+m] ) {
                              mvwaddch(gb_win,
                                       GB_MARGIN_TOP  + (i*2) + (k-1)*2,
                                       GB_MARGIN_LEFT + (j*4) + (m-1)*4, '#');
-                             delay(gb_win, 0);
                         }
                    }
               }
-         delay(gb_win, 1);
+         delay(gb_win, read_delay);
          }
     }
     return;
@@ -185,18 +233,20 @@ void test_movement_matrix(WINDOW *gb_win)
 
 void printstatus(WINDOW *status_win, char *status_text)
 {
-    int i;
-    int read_delay = 1;
-    int draw_delay = 0;
+    size_t i;
+    int draw_delay = 0;   /* non-zero value makes text 'draw' letter by letter */
 
+         /* clear previous text */
     mvwaddstr(status_win, 1, 3, "                                                ");
-    delay(status_win, read_delay);
+    delay(status_win, 1);
+
+         /* draw text char-by-char, or all at once if draw_delay == 0 */
     for (i = 0; i < strlen(status_text); i++)
     {
          mvwaddch(status_win, 1, 3+i, status_text[i]);
          delay(status_win, draw_delay);
     }
-    delay(status_win, read_delay);
+    delay(status_win, GLOBAL_DELAY);
     return;
 }
 
@@ -216,13 +266,13 @@ void draw_empty_gb(WINDOW *gb_win)
     return;
 }
 
-void delay(WINDOW *gb_win, int delay)
+void delay(WINDOW *win, int delay_amount)
 {
-    if (delay) {
-         halfdelay(delay);
-         wgetch(gb_win);
+    if (delay_amount) {
+         halfdelay(delay_amount);
+         wgetch(win);
     }
-    wrefresh(gb_win);
+    wrefresh(win);
     return;
 }
 
@@ -249,31 +299,41 @@ void game(int gb_array[5][5])
     gb_win     = create_newwin(gb_height, gb_width,     gb_starty,     gb_startx);    
     status_win = create_newwin(3,         status_width, gb_starty - 5, status_startx); 
 
+         /* print game board */ 
     printstatus(status_win, "Drawing Gameboard...");
-
-         /* print game board */
     draw_gb(gb_win);  
-    delay(gb_win, 5);
+    delay(gb_win, GLOBAL_DELAY);
 
-         /* test MOVEMENT_MATRIX */
+    printstatus(status_win, "Seeding RNG...");
+    srand(myrandom());
+    delay(gb_win, GLOBAL_DELAY);
+
+/*          test MOVEMENT_MATRIX 
     printstatus(status_win, "Drawing Legal Moves...");
     test_movement_matrix(gb_win);
-
+*/
          /* print game pieces */
+    printstatus(status_win, "Phase 0: Placing Tigers...");
     draw_pieces(gb_win, gb_array);  
+    delay(gb_win, GLOBAL_DELAY);
 
          /* placement phase */
-    printstatus(status_win, "Phase One: Goat Placement...");
-    for ( i = 0; i < 20; i++) {
-         goat_place(gb_array);
-         draw_pieces(gb_win, gb_array);
-         delay(gb_win, 1);
-         tiger_move(gb_win, gb_array);           /* in progress - to be written */
-    }
+    printstatus(status_win, "Phase 1: Goat Placement...");
 
          /* wait for input. quit on ESC */
     while (ch != 27) {
-         wrefresh(gb_win);            /* draw the screen */
+
+         gb_init(gb_array);
+
+         for ( i = 0; i < 20; i++) {
+              goat_place(gb_array);
+              draw_pieces(gb_win, gb_array);
+              //tiger_move(gb_win, gb_array);           /* in progress - to be written */
+              wrefresh(gb_win);
+              //halfdelay(1);
+              //ch = wgetch(gb_win);
+         }
+         halfdelay(1);
          ch = wgetch(gb_win);
     }
      
@@ -283,21 +343,14 @@ void game(int gb_array[5][5])
 
 void playgame() 
 {
-    int gb_array[5][5] =
-    { 
-         { 2, 0, 0, 0, 2 },
-         { 0, 0, 0, 0, 0 },
-         { 0, 0, 0, 0, 0 },
-         { 0, 0, 0, 0, 0 },
-         { 2, 0, 0, 0, 2 }
-    };
+    int gb_array[5][5];
+    gb_init(gb_array);
     game(gb_array);
     return;
 }
 
 int main() 
 {
-    srand(time(NULL));       /* seed randomizer */
     playgame();            
     return 0;
 }
